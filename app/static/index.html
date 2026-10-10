@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube Macro & Analyst Trend Intelligence</title>
+  <meta name="description" content="유튜브 주요 경제 분석가들의 시각과 의견을 기간별로 정리한 트렌드 인텔리전스 대시보드">
+  
+  <!-- Fonts: Pretendard & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+  
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="/static/css/style.css?v=20261010_v1">
+  
+  <!-- Chart.js & WordCloud2 -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.2.2/wordcloud2.min.js"></script>
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header class="navbar">
+    <a href="/" class="brand">
+      <div class="brand-icon">🎙️</div>
+      <div>
+        <div class="brand-title">유튜브 경제 분석가 트렌드</div>
+        <div class="brand-sub">Macro Analyst Sentiment & Trend Intelligence</div>
+      </div>
+      <span class="brand-badge">PRO RADAR</span>
+    </a>
+
+    <div class="nav-actions">
+      <!-- Dark / Light Mode Toggle -->
+      <button id="btn-theme-toggle" class="btn-icon" onclick="toggleTheme()" title="다크/라이트 모드 전환">
+        <span id="theme-toggle-icon">☀️</span>
+        <span id="theme-toggle-text">라이트 모드</span>
+      </button>
+
+      <!-- View Shift Tracker Modal Button -->
+      <button class="btn-icon" onclick="openTimelineModal()" title="전문가별 시간에 따른 뷰 변화 추적">
+        <span>🔍</span>
+        <span>시각 변화 추적</span>
+      </button>
+
+      <!-- Direct Video/Opinion Entry Modal Button -->
+      <button class="btn-icon" onclick="openCreateModal()" title="새로운 전문가 방송/의견 아카이브 등록">
+        <span>✍️</span>
+        <span>의견 직접 등록</span>
+      </button>
+
+      <!-- Monthly Targeted Collection Modal Button -->
+      <button class="btn-icon" onclick="openMonthlyCollectModal()" title="특정 연-월 경제 영상 타겟 수집 및 분석">
+        <span>📅</span>
+        <span>월별 수집 & 분석</span>
+      </button>
+
+      <!-- Ollama Model Selector -->
+      <div class="model-wrapper">
+        <span class="model-label">AI 모델</span>
+        <select id="model-select" class="model-select" onchange="changeModel()">
+          <option value="qwen3:8b" selected>Qwen 3 8B</option>
+          <option value="qwen3.5:9b">Qwen 3.5 9B</option>
+          <option value="gemma4:e4b">Gemma 4 e4B</option>
+        </select>
+      </div>
+
+      <!-- Live Pipeline Button -->
+      <button id="btn-pipeline" class="btn-primary" onclick="triggerPipeline()">
+        <span id="pipeline-icon">⚡</span>
+        <span id="pipeline-text">유튜브 최신 수집 & 분석</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Period Selector Bar (기간별 프리셋 & 자유 분석 기간 설정) -->
+  <div class="period-bar-container">
+    <div class="period-bar">
+      <!-- Left: Dynamic Shortcut Tabs & Monthly Dropdown -->
+      <div class="period-left-group">
+        <div class="period-tab-label">
+          <span>📅</span> 최신 숏컷:
+        </div>
+        <div class="period-tabs" id="period-preset-tabs">
+          <!-- Dynamically rendered based on actual collected months -->
+          <button class="period-btn active" data-period="2026-10" onclick="selectPeriod('2026-10')">🔥 최근 월 (2026.10)</button>
+          <button class="period-btn" data-period="all" onclick="selectPeriod('all')">전체 기간</button>
+        </div>
+        <!-- Quick Update Action Button for Latest Month -->
+        <button class="btn-icon btn-sm" id="btn-quick-refresh" onclick="quickUpdateLatestMonth()" title="최신 월 데이터 즉시 수집 & 업데이트">
+          <span>⚡</span>
+          <span>최신 수집 업데이트</span>
+        </button>
+        <!-- Quick Month Selector Dropdown -->
+        <select id="month-dropdown" class="period-select-dropdown" onchange="selectMonthDropdown(this.value)" title="월별 상세 선택">
+          <option value="">🗓️ 월별 아카이브 선택...</option>
+        </select>
+      </div>
+
+      <!-- Right: Custom Date Range Picker (자유 기간 직접 지정) -->
+      <div class="period-right-group">
+        <div class="custom-range-box">
+          <span class="custom-range-label">🗓️ 자유 기간 지정:</span>
+          <input type="date" id="range-start-date" class="date-input-custom" value="2026-08-01" title="시작일">
+          <span style="opacity: 0.5; font-weight: 700;">~</span>
+          <input type="date" id="range-end-date" class="date-input-custom" value="2026-10-10" title="종료일">
+          <button id="btn-apply-range" class="btn-primary btn-sm" onclick="applyCustomDateRange()">조회 적용</button>
+          <button class="btn-icon btn-sm" onclick="resetDateRange()" title="기본값 초기화">↺</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Period Status Banner -->
+    <div class="period-status-banner">
+      <div class="status-indicator">
+        <span class="pulse-dot"></span>
+        <span id="period-status-text">🔥 2026년 10월 데이터 분석 중</span>
+      </div>
+      <div class="period-meta" id="period-meta-text">
+        <span>⚡ 실시간 Kiwi 형태소 분석 & AI 컨센서스 연동</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Dashboard Container -->
+  <main class="main-container">
+    
+    <!-- KPI Stats Grid -->
+    <section class="stats-grid">
+      <div class="stat-card card-blue">
+        <div class="stat-header">
+          <div class="stat-label">분석된 영상</div>
+          <div class="stat-icon">📺</div>
+        </div>
+        <div class="stat-value" id="stat-total-videos">-</div>
+        <div class="stat-desc">
+          <span class="badge-tag neutral">자막/전문</span> 한국어 전문 스크립트 보유
+        </div>
+      </div>
+
+      <div class="stat-card card-purple">
+        <div class="stat-header">
+          <div class="stat-label">추적 분석가</div>
+          <div class="stat-icon">👔</div>
+        </div>
+        <div class="stat-value" id="stat-total-analysts">-</div>
+        <div class="stat-desc">
+          <span class="badge-tag neutral">대표 패널</span> 오건영·염승환·김일구·이선엽 외
+        </div>
+      </div>
+
+      <div class="stat-card card-emerald">
+        <div class="stat-header">
+          <div class="stat-label">시장 스탠스 컨센서스</div>
+          <div class="stat-icon">⚖️</div>
+        </div>
+        <div class="stat-value" id="stat-consensus-ratio">-</div>
+        <div class="stat-desc" id="stat-consensus-desc">
+          <span class="badge-tag caution">경계/신중 우세</span>
+        </div>
+      </div>
+
+      <div class="stat-card card-amber">
+        <div class="stat-header">
+          <div class="stat-label">최대 언급 테마</div>
+          <div class="stat-icon">🔥</div>
+        </div>
+        <div class="stat-value" id="stat-top-category">-</div>
+        <div class="stat-desc">
+          <span class="badge-tag bullish">관심도 1위</span> 채널 누적 조회수 <span id="stat-total-views">-</span>회
+        </div>
+      </div>
+    </section>
+
+    <!-- Executive Period Consensus Hero Banner -->
+    <section class="briefing-card" id="briefing-container">
+      <div class="briefing-header">
+        <div class="briefing-title-group">
+          <span style="font-size: 1.5rem;">🤖</span>
+          <div class="briefing-title" id="briefing-title">기간별 시장 컨센서스 & 핵심 쟁점 AI 브리핑</div>
+        </div>
+        <button class="btn-icon" onclick="refreshPeriodBriefing()" style="font-size: 0.78rem;">
+          🔄 AI 브리핑 재분석
+        </button>
+      </div>
+
+      <div class="briefing-summary" id="briefing-summary">
+        데이터를 로딩 중입니다...
+      </div>
+
+      <div class="briefing-debates-grid" id="briefing-debates">
+        <!-- AI Debates inserted dynamically -->
+      </div>
+
+      <div class="theme-chips" id="briefing-themes">
+        <!-- Theme chips inserted dynamically -->
+      </div>
+    </section>
+
+    <!-- Analytics Dashboard 2-Column Grid -->
+    <section class="analytics-grid">
+      <!-- Left Column: Theme Timeline Line Chart -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>📈</span> 기간별 주요 경제 테마 언급 추이 (Timeline)
+          </div>
+          <span style="font-size: 0.78rem; color: var(--text-secondary);">월별 언급 빈도수</span>
+        </div>
+        <div class="chart-container">
+          <canvas id="timelineChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Right Column: Surge Keywords Table -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>🚀</span> 급상승(Surge) 경제 키워드
+          </div>
+          <span style="font-size: 0.78rem; color: var(--accent-cyan);" id="surge-period-label">전체 기간</span>
+        </div>
+        <div style="overflow-y: auto; max-height: 290px;">
+          <table class="surge-table">
+            <thead>
+              <tr>
+                <th style="width: 38px;">순위</th>
+                <th>핵심 경제 단어</th>
+                <th style="width: 45px; text-align: center;">빈도</th>
+                <th style="width: 80px;">상승지수</th>
+              </tr>
+            </thead>
+            <tbody id="surge-tbody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Word Cloud & Sentiment Distribution Grid -->
+    <section class="analytics-grid">
+      <!-- Left: Word Cloud -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>☁️</span> 경제 분석가 핵심 어휘 워드클라우드 (Word Cloud)
+          </div>
+          <span style="font-size: 0.78rem; color: var(--text-secondary);">Kiwi 형태소 명사 빈도 기반</span>
+        </div>
+        <div class="wordcloud-wrapper">
+          <canvas id="wordCloudCanvas" width="800" height="290"></canvas>
+        </div>
+      </div>
+
+      <!-- Right: Sentiment Distribution Doughnut Chart -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>📊</span> 분석가 스탠스 분포
+          </div>
+          <span style="font-size: 0.78rem; color: var(--text-secondary);">Bullish vs Bearish</span>
+        </div>
+        <div class="chart-container" style="display: flex; align-items: center; justify-content: center;">
+          <canvas id="sentimentChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Analyst Opinion Matrix Section -->
+    <section class="analyst-matrix-section">
+      <div class="section-header">
+        <div class="section-title">
+          <span>👔</span> 주요 분석가별 스탠스 & 핵심 의견 매트릭스
+        </div>
+        <!-- Topic Filter Tabs -->
+        <div class="period-tabs" id="topic-filter-tabs">
+          <button class="period-btn active" onclick="filterAnalystTopic('all')">전체 주제</button>
+          <button class="period-btn" onclick="filterAnalystTopic('금리/통화정책')">금리/통화정책</button>
+          <button class="period-btn" onclick="filterAnalystTopic('AI/반도체')">AI/반도체</button>
+          <button class="period-btn" onclick="filterAnalystTopic('국내주식')">국내주식</button>
+          <button class="period-btn" onclick="filterAnalystTopic('환율/달러자산')">환율/외환</button>
+          <button class="period-btn" onclick="filterAnalystTopic('부동산')">부동산</button>
+        </div>
+      </div>
+
+      <div class="analysts-grid" id="analysts-grid">
+        <!-- Analyst Opinion Cards inserted dynamically -->
+      </div>
+    </section>
+
+    <!-- Video Feed & Deep Intelligence Explorer -->
+    <section class="analyst-matrix-section">
+      <div class="section-header">
+        <div class="section-title">
+          <span>📺</span> 분석 대상 영상 & AI 정밀 리포트 피드
+        </div>
+      </div>
+
+      <!-- Filter Controls Bar -->
+      <div class="filter-bar">
+        <input type="text" id="video-search-input" class="filter-input" placeholder="영상 제목, 분석가 또는 키워드 검색..." oninput="onSearchInput()">
+        
+        <select id="filter-category" class="filter-select" onchange="loadVideos()">
+          <option value="all">모든 카테고리</option>
+        </select>
+
+        <select id="filter-analyst" class="filter-select" onchange="loadVideos()">
+          <option value="all">모든 분석가</option>
+        </select>
+
+        <select id="filter-sentiment" class="filter-select" onchange="loadVideos()">
+          <option value="all">모든 스탠스</option>
+          <option value="bullish">낙관 (Bullish)</option>
+          <option value="caution">경계 (Caution)</option>
+          <option value="neutral">중립 (Neutral)</option>
+          <option value="bearish">비관 (Bearish)</option>
+        </select>
+      </div>
+
+      <!-- Videos Card Grid -->
+      <div class="video-grid" id="video-grid">
+        <!-- Video cards inserted dynamically -->
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Video Inspection Modal Dialog -->
+  <div class="modal-overlay" id="video-modal" onclick="closeModalOnBackdrop(event)">
+    <div class="modal-window">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-title">영상 상세 & AI 인텔리전스 분석</div>
+        <button class="btn-close-modal" onclick="closeModal('video-modal')">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body">
+        <!-- Modal content loaded dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Analyst View Shift Timeline Tracker Modal -->
+  <div class="modal-overlay" id="timeline-modal" onclick="closeModalOnBackdrop(event)">
+    <div class="modal-window" style="max-width: 900px;">
+      <div class="modal-header">
+        <div class="modal-title">📈 전문가별 시간에 따른 시각(View) 변화 추적 (2024 ➔ 2026.10)</div>
+        <button class="btn-close-modal" onclick="closeModal('timeline-modal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;">
+          <span style="font-size: 0.85rem; font-weight: 700; color: var(--text-secondary);">전문가 필터:</span>
+          <div class="period-tabs" id="timeline-analyst-tabs">
+            <button class="period-btn active" onclick="filterTimelineAnalyst('all')">전체</button>
+            <button class="period-btn" onclick="filterTimelineAnalyst('오건영')">오건영</button>
+            <button class="period-btn" onclick="filterTimelineAnalyst('염승환')">염승환</button>
+            <button class="period-btn" onclick="filterTimelineAnalyst('김일구')">김일구</button>
+            <button class="period-btn" onclick="filterTimelineAnalyst('이선엽')">이선엽</button>
+            <button class="period-btn" onclick="filterTimelineAnalyst('박석중')">박석중</button>
+            <button class="period-btn" onclick="filterTimelineAnalyst('홍춘욱')">홍춘욱</button>
+            <button class="period-btn" onclick="filterTimelineAnalyst('슈카')">슈카</button>
+          </div>
+        </div>
+        <div id="timeline-modal-content" style="display: flex; flex-direction: column; gap: 1.25rem;">
+          <!-- Timeline entries rendered dynamically -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Direct Opinion / Video Creation Modal -->
+  <div class="modal-overlay" id="create-modal" onclick="closeModalOnBackdrop(event)">
+    <div class="modal-window" style="max-width: 650px;">
+      <div class="modal-header">
+        <div class="modal-title">✍️ 새로운 전문가 방송 / 의견 직접 등록</div>
+        <button class="btn-close-modal" onclick="closeModal('create-modal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="create-video-form" onsubmit="handleCreateVideo(event)">
+          <div style="display: flex; flex-direction: column; gap: 1rem;">
+            <div class="form-row">
+              <div style="flex: 1;">
+                <label class="form-label">전문가명 *</label>
+                <input type="text" id="form-analyst" class="filter-input" style="width: 100%;" placeholder="예: 오건영, 염승환 등" required>
+              </div>
+              <div style="flex: 1;">
+                <label class="form-label">방송 날짜 (Date) *</label>
+                <input type="date" id="form-date" class="filter-input" style="width: 100%;" value="2026-10-10" required>
+              </div>
+            </div>
+
+            <div>
+              <label class="form-label">방송 제목 (Title) *</label>
+              <input type="text" id="form-title" class="filter-input" style="width: 100%;" placeholder="유튜브 방송 제목 입력..." required>
+            </div>
+
+            <div class="form-row">
+              <div style="flex: 1;">
+                <label class="form-label">카테고리</label>
+                <select id="form-category" class="filter-select" style="width: 100%;">
+                  <option value="거시경제/금리">거시경제/금리</option>
+                  <option value="국내주식">국내주식</option>
+                  <option value="미국주식/글로벌">미국주식/글로벌</option>
+                  <option value="부동산">부동산</option>
+                  <option value="환율/원자재">환율/원자재</option>
+                </select>
+              </div>
+              <div style="flex: 1;">
+                <label class="form-label">시장 국면 / 스탠스</label>
+                <select id="form-stance" class="filter-select" style="width: 100%;">
+                  <option value="Bullish">상승/낙관 (Bullish)</option>
+                  <option value="Caution" selected>경계/신중 (Caution)</option>
+                  <option value="Neutral">중립/관망 (Neutral)</option>
+                  <option value="Bearish">하락/비관 (Bearish)</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label class="form-label">유튜브 링크 (URL)</label>
+              <input type="url" id="form-url" class="filter-input" style="width: 100%;" placeholder="https://www.youtube.com/watch?v=...">
+            </div>
+
+            <div>
+              <label class="form-label">핵심 요약 및 주장 (Summary)</label>
+              <textarea id="form-summary" class="filter-input" style="width: 100%; min-height: 80px;" placeholder="전문가의 핵심 논점과 시장 전망 요약..." required></textarea>
+            </div>
+
+            <div>
+              <label class="form-label">주요 발언 / 쿼트 (Key Quote)</label>
+              <input type="text" id="form-quote" class="filter-input" style="width: 100%;" placeholder='예: "2026년 가을부터는 재정 인플레이션을 주시해야 합니다."'>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 0.5rem;">
+              <button type="button" class="btn-icon" onclick="closeModal('create-modal')">취소</button>
+              <button type="submit" class="btn-primary">저장 및 Kiwi 형태소 분석</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Monthly Collection & Analysis Trigger Modal -->
+  <div class="modal-overlay" id="monthly-collect-modal" onclick="closeModalOnBackdrop(event)">
+    <div class="modal-window" style="max-width: 540px;">
+      <div class="modal-header">
+        <div class="modal-title">📅 특정 월 타겟 수집 & 트렌드 분석</div>
+        <button class="btn-close-modal" onclick="closeModal('monthly-collect-modal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="color: var(--text-secondary); font-size: 0.88rem; line-height: 1.6; margin-bottom: 1.25rem;">
+          수집하고자 하는 연-월(YYYY-MM)을 선택하면, 해당 월에 발행된 경제 전문 채널 영상들을 집중 수집하고 형태소(Kiwi) 및 AI 컨센서스 분석 파이프라인을 가동합니다.
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+          <div>
+            <label class="form-label">수집 대상 연-월 (Target Month) *</label>
+            <div style="display: flex; gap: 0.5rem;">
+              <input type="month" id="collect-target-month" class="filter-input" style="flex: 1;" value="2026-10" required>
+              <select id="collect-quick-months" class="filter-select" onchange="document.getElementById('collect-target-month').value=this.value">
+                <option value="2026-10">2026년 10월 (현재)</option>
+                <option value="2026-09">2026년 9월</option>
+                <option value="2026-08">2026년 8월</option>
+                <option value="2026-07">2026년 7월</option>
+                <option value="2026-06">2026년 6월</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="form-label">채널당 수집 영상 수</label>
+            <input type="number" id="collect-limit-per-channel" class="filter-input" style="width: 100%;" value="5" min="1" max="20">
+          </div>
+          <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px; padding: 0.85rem; font-size: 0.82rem; color: var(--accent-cyan); line-height: 1.5;">
+            💡 2026년 10월 현재 기준 유튜브 경제 채널(삼프로TV, 슈카월드, 김일구/오건영 등)의 영상과 메타데이터가 아카이빙됩니다.
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 0.5rem;">
+            <button type="button" class="btn-icon" onclick="closeModal('monthly-collect-modal')">취소</button>
+            <button type="button" class="btn-primary" onclick="handleStartMonthlyCollection()">
+              <span>🚀</span> 수집 & 분석 시작
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- JavaScript -->
+  <script src="/static/js/dashboard.js?v=20261010_v1"></script>
+</body>
+</html>
