@@ -7,18 +7,34 @@ except ImportError:
 
 def extract_transcript(video_id: str) -> Optional[str]:
     """
-    유튜브 비디오 ID로부터 한국어 자막/스크립트 추출
+    유튜브 비디오 ID로부터 실제 한국어 자막/스크립트 추출
     1순위: 수동 한국어 자막 ('ko')
     2순위: 자동 생성 한국어 자막 ('ko')
-    3순위: 영어 자막 ('en')
+    3순위: 번역 자막 ('ko')
+    4순위: 기타 자막
     """
     if not YouTubeTranscriptApi:
         return None
         
     try:
-        # 지원 언어 우선순위로 자막 가져오기
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-        
+        # youtube_transcript_api v1.x (인스턴스 기반 .list) 및 레거시(.list_transcripts) 모두 호환
+        transcript_list = None
+        if hasattr(YouTubeTranscriptApi, 'list_transcripts'):
+            try:
+                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            except Exception:
+                pass
+                
+        if not transcript_list:
+            try:
+                ytt = YouTubeTranscriptApi()
+                transcript_list = ytt.list(video_id)
+            except Exception as e:
+                pass
+                
+        if not transcript_list:
+            return None
+            
         transcript = None
         try:
             # 1. 한국어 수동/자동 자막 찾기
@@ -27,29 +43,38 @@ def extract_transcript(video_id: str) -> Optional[str]:
             try:
                 # 2. 번역 가능 시 한국어로 번역 시도
                 for t in transcript_list:
-                    if t.is_translatable:
+                    if getattr(t, 'is_translatable', False):
                         transcript = t.translate('ko')
                         break
             except Exception:
                 pass
                 
         if not transcript:
-            # 3. 아무 사용 가능한 자막 찾기
+            # 3. 다른 언어 자막
             for t in transcript_list:
                 transcript = t
                 break
                 
         if transcript:
             data = transcript.fetch()
-            # 텍스트 추출 및 정제
-            lines = [item.get("text", "") for item in data]
+            lines = []
+            for item in data:
+                # FetchedTranscriptSnippet 객체 또는 dict 지원
+                txt = getattr(item, 'text', None)
+                if txt is None and isinstance(item, dict):
+                    txt = item.get("text", "")
+                if txt:
+                    lines.append(txt)
             full_text = " ".join(lines)
-            return clean_transcript_text(full_text)
-            
+            cleaned = clean_transcript_text(full_text)
+            if cleaned and len(cleaned) > 20:
+                return cleaned
+                
     except Exception as e:
-        # 자막이 비활성화되었거나 추출 불가인 경우
-        print(f"[Transcript] Could not extract transcript for {video_id}: {e}")
-        return None
+        # 자막이 제공되지 않는 영상
+        pass
+        
+    return None
 
 def clean_transcript_text(text: str) -> str:
     """자막 텍스트 특수문자 및 불필요한 공백 정제"""

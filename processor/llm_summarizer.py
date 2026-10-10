@@ -170,8 +170,21 @@ def generate_period_intelligence(
         start_date=start_date,
         end_date=end_date
     )
+    
+    display_period = period_label
+    if start_date or end_date:
+        display_period = f"{start_date or '초기'} ~ {end_date or '현재'}"
+    elif period_label and len(period_label) == 7 and period_label[4] == "-":
+        display_period = f"{period_label[:4]}년 {int(period_label[5:7])}월"
+
     if not opinions:
-        opinions = get_analyst_opinions()
+        return {
+            "period_title": f"{display_period} 시장 컨센서스 및 쟁점 브리핑",
+            "market_consensus_summary": f"해당 분석 기간({display_period})에 등록된 분석가 의견 데이터가 없습니다.",
+            "key_debates": ["해당 기간에 등록된 전문가 의견 데이터가 없습니다."],
+            "top_themes": [],
+            "strategic_recommendations": "해당 분석 기간 내에 등록된 전문가 의견이 없어 유효한 컨센서스를 도출할 수 없습니다. 분석 기간을 확장하거나 새로운 영상을 수집해 주세요."
+        }
         
     summary_snippets = []
     for op in opinions[:12]:
@@ -180,12 +193,6 @@ def generate_period_intelligence(
         )
     snippets_text = "\n".join(summary_snippets)
     
-    display_period = period_label
-    if start_date or end_date:
-        display_period = f"{start_date or '초기'} ~ {end_date or '현재'}"
-    elif period_label and len(period_label) == 7 and period_label[4] == "-":
-        display_period = f"{period_label[:4]}년 {int(period_label[5:7])}월"
-
     system_prompt = (
         "당신은 글로벌 매크로 헤지펀드의 리서치 센터장입니다. "
         "기간별 유튜브 경제 분석가들의 시각과 컨센서스 변화를 구조화하여 종합 인텔리전스 보고서를 작성하세요."
@@ -215,7 +222,7 @@ def generate_period_intelligence(
     except Exception as e:
         print(f"[LLM] Fallback period intelligence: {e}")
         data = {
-            "period_title": f"{period_label} 경제 분석가 컨센서스 종합 인텔리전스",
+            "period_title": f"{display_period} 경제 분석가 컨센서스 종합 인텔리전스",
             "market_consensus_summary": "연준의 금리 인하 경로와 실물 경기 연착륙 여부를 두고 분석가들 간에 낙관과 신중론이 교차하고 있습니다. AI 하드웨어 밸류체인과 환율 변동성이 핵심 화두입니다.",
             "key_debates": [
                 "금리 인하가 경기 침체(R의 공포) 방어용인지 유동성 랠리 촉매제인지에 대한 시각 차이",

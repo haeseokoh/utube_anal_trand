@@ -13,6 +13,45 @@ let sentimentChart = null;
 let searchTimeout = null;
 let availableMonths = [];
 
+// XSS 방어 및 안전한 URL/텍스트 처리 헬퍼
+function escapeHTML(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function sanitizeUrl(url) {
+  if (!url) return "#";
+  const str = String(url).trim();
+  if (/^https?:\/\//i.test(str)) {
+    return str;
+  }
+  return "#";
+}
+
+function createStanceBadgeElement(stance) {
+  const span = document.createElement("span");
+  const s = (stance || "Neutral").toLowerCase();
+  if (s.includes("bullish") || s.includes("낙관")) {
+    span.className = "badge-tag bullish";
+    span.textContent = "Bullish 상승";
+  } else if (s.includes("caution") || s.includes("신중") || s.includes("경계")) {
+    span.className = "badge-tag caution";
+    span.textContent = "Caution 경계";
+  } else if (s.includes("bearish") || s.includes("비관") || s.includes("하락")) {
+    span.className = "badge-tag bearish";
+    span.textContent = "Bearish 하락";
+  } else {
+    span.className = "badge-tag neutral";
+    span.textContent = "Neutral 중립";
+  }
+  return span;
+}
+
 // Initialize on DOM Ready
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
@@ -710,40 +749,91 @@ async function loadAnalystMatrix() {
       const card = document.createElement("div");
       card.className = "analyst-card";
 
-      const stanceBadge = getStanceBadge(item.stance);
-      const initial = item.analyst_name.slice(0, 1);
+      const topDiv = document.createElement("div");
 
-      card.innerHTML = `
-        <div>
-          <div class="analyst-header">
-            <div class="analyst-profile">
-              <div class="analyst-avatar">${initial}</div>
-              <div>
-                <div class="analyst-name">${item.analyst_name}</div>
-                <div class="analyst-channel">${item.channel_title}</div>
-              </div>
-            </div>
-            ${stanceBadge}
-          </div>
+      const header = document.createElement("div");
+      header.className = "analyst-header";
 
-          <span class="opinion-topic">${item.topic}</span>
-          <div class="core-argument">${item.core_argument}</div>
-          
-          ${item.key_quote ? `<div class="quote-bubble">"${item.key_quote}"</div>` : ""}
-        </div>
+      const profile = document.createElement("div");
+      profile.className = "analyst-profile";
 
-        <div class="analyst-card-footer">
-          <span>📅 ${item.published_at}</span>
-          <div style="display: flex; gap: 0.4rem; align-items: center;">
-            <a href="${getSafeYouTubeUrl(item)}" target="_blank" rel="noopener noreferrer" class="btn-yt-link" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;" title="유튜브 실제 영상 재생">
-              ▶ 유튜브
-            </a>
-            <button class="btn-detail" onclick="openVideoDetail('${item.video_id}')">
-              AI 심층 요약 ↗
-            </button>
-          </div>
-        </div>
-      `;
+      const avatar = document.createElement("div");
+      avatar.className = "analyst-avatar";
+      avatar.textContent = (item.analyst_name || "?").slice(0, 1);
+
+      const nameBox = document.createElement("div");
+
+      const nameEl = document.createElement("div");
+      nameEl.className = "analyst-name";
+      nameEl.textContent = item.analyst_name || "";
+
+      const chEl = document.createElement("div");
+      chEl.className = "analyst-channel";
+      chEl.textContent = item.channel_title || "";
+
+      nameBox.appendChild(nameEl);
+      nameBox.appendChild(chEl);
+
+      profile.appendChild(avatar);
+      profile.appendChild(nameBox);
+
+      header.appendChild(profile);
+      header.appendChild(createStanceBadgeElement(item.stance));
+
+      const topicSpan = document.createElement("span");
+      topicSpan.className = "opinion-topic";
+      topicSpan.textContent = item.topic || "";
+
+      const coreArg = document.createElement("div");
+      coreArg.className = "core-argument";
+      coreArg.textContent = item.core_argument || "";
+
+      topDiv.appendChild(header);
+      topDiv.appendChild(topicSpan);
+      topDiv.appendChild(coreArg);
+
+      if (item.key_quote) {
+        const quoteDiv = document.createElement("div");
+        quoteDiv.className = "quote-bubble";
+        quoteDiv.textContent = `"${item.key_quote}"`;
+        topDiv.appendChild(quoteDiv);
+      }
+
+      const footer = document.createElement("div");
+      footer.className = "analyst-card-footer";
+
+      const dateSpan = document.createElement("span");
+      dateSpan.textContent = `📅 ${item.published_at || ""}`;
+
+      const fBtnGroup = document.createElement("div");
+      fBtnGroup.style.display = "flex";
+      fBtnGroup.style.gap = "0.4rem";
+      fBtnGroup.style.alignItems = "center";
+
+      const ytBtn = document.createElement("a");
+      ytBtn.href = sanitizeUrl(getSafeYouTubeUrl(item));
+      ytBtn.target = "_blank";
+      ytBtn.rel = "noopener noreferrer";
+      ytBtn.className = "btn-yt-link";
+      ytBtn.style.padding = "0.3rem 0.6rem";
+      ytBtn.style.fontSize = "0.75rem";
+      ytBtn.title = "유튜브 실제 영상 재생";
+      ytBtn.textContent = "▶ 유튜브";
+
+      const detailBtn = document.createElement("button");
+      detailBtn.className = "btn-detail";
+      detailBtn.textContent = "AI 심층 요약 ↗";
+      detailBtn.addEventListener("click", () => openVideoDetail(item.video_id));
+
+      fBtnGroup.appendChild(ytBtn);
+      fBtnGroup.appendChild(detailBtn);
+
+      footer.appendChild(dateSpan);
+      footer.appendChild(fBtnGroup);
+
+      card.appendChild(topDiv);
+      card.appendChild(footer);
+
       grid.appendChild(card);
     });
   } catch (e) {
@@ -828,40 +918,96 @@ async function loadVideos() {
       const card = document.createElement("div");
       card.className = "video-card";
 
-      const thumb = v.thumbnail_url || "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=640";
-      const stanceBadge = getStanceBadge(v.sentiment_label);
-      const ytUrl = getSafeYouTubeUrl(v);
+      // 1. Thumbnail wrap
+      const thumbWrap = document.createElement("div");
+      thumbWrap.className = "thumbnail-wrap";
 
-      card.innerHTML = `
-        <div class="thumbnail-wrap">
-          <img src="${thumb}" alt="${v.title}" class="thumbnail-img" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=640'">
-          <span class="category-badge-overlay">${v.category}</span>
-          <span class="duration-badge-overlay">${v.analyst_name}</span>
-        </div>
+      const img = document.createElement("img");
+      img.src = sanitizeUrl(v.thumbnail_url || "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=640");
+      img.alt = v.title || "";
+      img.className = "thumbnail-img";
+      img.loading = "lazy";
+      img.onerror = () => { img.src = "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=640"; };
 
-        <div class="video-content">
-          <div>
-            <div class="video-meta-top">
-              <span>${v.channel_title}</span>
-              <span>${v.published_at}</span>
-            </div>
-            <h3 class="video-title" title="${v.title}">${v.title}</h3>
-            <p class="video-summary-preview">${v.summary_text || "분석 텍스트 준비 중..."}</p>
-          </div>
+      const catBadge = document.createElement("span");
+      catBadge.className = "category-badge-overlay";
+      catBadge.textContent = v.category || "";
 
-          <div class="video-actions">
-            ${stanceBadge}
-            <div style="display: flex; gap: 0.5rem; align-items: center;">
-              <a href="${ytUrl}" target="_blank" rel="noopener noreferrer" class="btn-yt-link" title="유튜브 실제 영상 재생">
-                ▶ 유튜브
-              </a>
-              <button class="btn-ai-summary" onclick="openVideoDetail('${v.video_id}')">
-                🤖 AI 요약
-              </button>
-            </div>
-          </div>
-        </div>
-      `;
+      const analystBadge = document.createElement("span");
+      analystBadge.className = "duration-badge-overlay";
+      analystBadge.textContent = v.analyst_name || "";
+
+      thumbWrap.appendChild(img);
+      thumbWrap.appendChild(catBadge);
+      thumbWrap.appendChild(analystBadge);
+
+      // 2. Video content
+      const content = document.createElement("div");
+      content.className = "video-content";
+
+      const topSection = document.createElement("div");
+
+      const metaTop = document.createElement("div");
+      metaTop.className = "video-meta-top";
+
+      const chSpan = document.createElement("span");
+      chSpan.textContent = v.channel_title || "";
+
+      const pubSpan = document.createElement("span");
+      pubSpan.textContent = v.published_at || "";
+
+      metaTop.appendChild(chSpan);
+      metaTop.appendChild(pubSpan);
+
+      const titleEl = document.createElement("h3");
+      titleEl.className = "video-title";
+      titleEl.title = v.title || "";
+      titleEl.textContent = v.title || "";
+
+      const summaryEl = document.createElement("p");
+      summaryEl.className = "video-summary-preview";
+      summaryEl.textContent = v.summary_text || "분석 텍스트 준비 중...";
+
+      topSection.appendChild(metaTop);
+      topSection.appendChild(titleEl);
+      topSection.appendChild(summaryEl);
+
+      // 3. Actions
+      const actions = document.createElement("div");
+      actions.className = "video-actions";
+
+      const stanceBadge = createStanceBadgeElement(v.sentiment_label);
+
+      const btnGroup = document.createElement("div");
+      btnGroup.style.display = "flex";
+      btnGroup.style.gap = "0.5rem";
+      btnGroup.style.alignItems = "center";
+
+      const ytLink = document.createElement("a");
+      ytLink.href = sanitizeUrl(getSafeYouTubeUrl(v));
+      ytLink.target = "_blank";
+      ytLink.rel = "noopener noreferrer";
+      ytLink.className = "btn-yt-link";
+      ytLink.title = "유튜브 실제 영상 재생";
+      ytLink.textContent = "▶ 유튜브";
+
+      const aiBtn = document.createElement("button");
+      aiBtn.className = "btn-ai-summary";
+      aiBtn.textContent = "🤖 AI 요약";
+      aiBtn.addEventListener("click", () => openVideoDetail(v.video_id));
+
+      btnGroup.appendChild(ytLink);
+      btnGroup.appendChild(aiBtn);
+
+      actions.appendChild(stanceBadge);
+      actions.appendChild(btnGroup);
+
+      content.appendChild(topSection);
+      content.appendChild(actions);
+
+      card.appendChild(thumbWrap);
+      card.appendChild(content);
+
       grid.appendChild(card);
     });
   } catch (e) {
@@ -893,22 +1039,22 @@ async function openVideoDetail(videoId) {
     document.getElementById("modal-title").textContent = video.title;
 
     const pointsHtml = (ai.key_points || [])
-      .map(pt => `<li>${pt}</li>`)
+      .map(pt => `<li>${escapeHTML(pt)}</li>`)
       .join("");
 
     const assetsHtml = (ai.mentioned_assets || [])
-      .map(a => `<span class="badge-tag neutral" style="margin-right: 0.35rem; margin-bottom: 0.35rem;">${a}</span>`)
+      .map(a => `<span class="badge-tag neutral" style="margin-right: 0.35rem; margin-bottom: 0.35rem;">${escapeHTML(a)}</span>`)
       .join("");
 
     modalBody.innerHTML = `
       <div>
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
           <div style="font-size: 0.88rem; color: var(--text-secondary);">
-            📺 <strong>${video.channel_title}</strong> | 분석가: <strong>${video.analyst_name}</strong> | 발행일: ${video.published_at}
+            📺 <strong>${escapeHTML(video.channel_title)}</strong> | 분석가: <strong>${escapeHTML(video.analyst_name)}</strong> | 발행일: ${escapeHTML(video.published_at)}
           </div>
           <div style="display: flex; gap: 0.5rem; align-items: center;">
             ${getStanceBadge(ai.analyst_stance || video.sentiment_label)}
-            <a href="${getSafeYouTubeUrl(video)}" target="_blank" rel="noopener noreferrer" class="btn-primary" style="padding: 0.35rem 0.8rem; font-size: 0.78rem;" title="유튜브 실제 영상 재생">
+            <a href="${sanitizeUrl(getSafeYouTubeUrl(video))}" target="_blank" rel="noopener noreferrer" class="btn-primary" style="padding: 0.35rem 0.8rem; font-size: 0.78rem;" title="유튜브 실제 영상 재생">
               유튜브 원본 열기 ↗
             </a>
           </div>
@@ -926,14 +1072,14 @@ async function openVideoDetail(videoId) {
         <div class="insight-box">
           <div class="insight-box-title">💡 투자 시사점 & 대응 전략</div>
           <div style="font-size: 0.86rem; color: var(--text-primary); line-height: 1.6;">
-            ${ai.investment_implication || "매크로 변곡점 관망 및 방어적 분산투자 권고"}
+            ${escapeHTML(ai.investment_implication || "매크로 변곡점 관망 및 방어적 분산투자 권고")}
           </div>
         </div>
 
         <div class="insight-box">
           <div class="insight-box-title">⚠️ 주요 리스크 요인</div>
           <div style="font-size: 0.86rem; color: var(--text-primary); line-height: 1.6;">
-            ${ai.risk_factors || "통화정책 변동성 및 지정학적 리스크"}
+            ${escapeHTML(ai.risk_factors || "통화정책 변동성 및 지정학적 리스크")}
           </div>
         </div>
       </div>
@@ -952,7 +1098,7 @@ async function openVideoDetail(videoId) {
           <summary style="font-size: 0.84rem; font-weight: 700; color: var(--text-secondary); cursor: pointer;">
             📜 전문 스크립트 / 자막 보기 (클릭하여 펼치기)
           </summary>
-          <div class="transcript-text">${video.transcript_text || "자막 텍스트가 없습니다."}</div>
+          <div class="transcript-text">${escapeHTML(video.transcript_text || "자막 텍스트가 없습니다.")}</div>
         </details>
       </div>
     `;
@@ -1011,30 +1157,30 @@ async function filterTimelineAnalyst(analystName) {
 
       const streamHtml = g.timeline.map(item => `
         <div class="timeline-point">
-          <span class="timeline-date-tag">📅 ${item.published_at} (${item.period_label})</span>
+          <span class="timeline-date-tag">📅 ${escapeHTML(item.published_at)} (${escapeHTML(item.period_label)})</span>
           <div class="timeline-opinion-card">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem; flex-wrap: wrap; gap: 0.3rem;">
-              <strong style="color: var(--text-heading); font-size: 0.9rem;">${item.title}</strong>
+              <strong style="color: var(--text-heading); font-size: 0.9rem;">${escapeHTML(item.title)}</strong>
               <div style="display: flex; gap: 0.4rem; align-items: center;">
                 ${getStanceBadge(item.stance)}
-                <a href="${getSafeYouTubeUrl(item)}" target="_blank" rel="noopener noreferrer" class="btn-yt-link" style="padding: 0.2rem 0.5rem; font-size: 0.72rem;" title="유튜브 실제 영상 재생">
+                <a href="${sanitizeUrl(getSafeYouTubeUrl(item))}" target="_blank" rel="noopener noreferrer" class="btn-yt-link" style="padding: 0.2rem 0.5rem; font-size: 0.72rem;" title="유튜브 실제 영상 재생">
                   ▶ 원본
                 </a>
               </div>
             </div>
             <div style="font-size: 0.85rem; color: var(--text-primary); margin-bottom: 0.4rem;">
-              <span class="opinion-topic" style="margin-right: 0.4rem;">${item.topic}</span>
-              ${item.core_argument}
+              <span class="opinion-topic" style="margin-right: 0.4rem;">${escapeHTML(item.topic)}</span>
+              ${escapeHTML(item.core_argument)}
             </div>
-            ${item.key_quote ? `<div class="quote-bubble" style="margin-bottom: 0.3rem;">"${item.key_quote}"</div>` : ""}
+            ${item.key_quote ? `<div class="quote-bubble" style="margin-bottom: 0.3rem;">"${escapeHTML(item.key_quote)}"</div>` : ""}
           </div>
         </div>
       `).join("");
 
       groupCard.innerHTML = `
         <div class="timeline-analyst-name">
-          <span class="analyst-avatar" style="width: 32px; height: 32px; font-size: 0.9rem;">${g.analyst_name.slice(0, 1)}</span>
-          ${g.analyst_name} 전문가의 시간별 뷰 변화
+          <span class="analyst-avatar" style="width: 32px; height: 32px; font-size: 0.9rem;">${escapeHTML(g.analyst_name.slice(0, 1))}</span>
+          ${escapeHTML(g.analyst_name)} 전문가의 시간별 뷰 변화
         </div>
         <div class="timeline-stream">
           ${streamHtml}
@@ -1046,6 +1192,7 @@ async function filterTimelineAnalyst(analystName) {
     content.innerHTML = `<div style="color: var(--accent-red); padding: 2rem; text-align: center;">데이터 로드 중 오류가 발생했습니다.</div>`;
   }
 }
+
 
 function openCreateModal() {
   document.getElementById("create-modal").classList.add("open");

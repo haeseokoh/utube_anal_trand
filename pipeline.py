@@ -66,10 +66,9 @@ def run_pipeline(
             transcript = row[2] or ""
             summary = row[3] or ""
             
-            # 분석 대상 텍스트 결합
-            combined_text = f"{title} {summary} {transcript}"
-            
-            nlp_res = extract_keywords_and_sentiment(combined_text, top_n=30)
+            # 분석 대상 텍스트: 검증된 실제 자막 원문이 있으면 제목과 자막을 사용하고, 자막이 없으면 원본 제목만 사용 (생성된 요약문 배제)
+            source_text = f"{title} {transcript}" if (transcript and len(transcript.strip()) > 30) else title
+            nlp_res = extract_keywords_and_sentiment(source_text, top_n=30)
             
             # 키워드 저장
             save_video_keywords(vid, nlp_res["keywords"])

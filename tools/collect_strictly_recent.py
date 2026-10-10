@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from crawler.youtube_collector import detect_analyst, detect_category
+from crawler.transcript_extractor import extract_transcript
 from db.database import init_db, get_connection, clear_trend_cache
 from processor.nlp_engine import extract_keywords_and_sentiment
 
@@ -217,22 +218,9 @@ def process_and_rebuild():
             summary = f"[{channel}] {analyst}의 실시간 분석 ({pub_text}): '{title}'. {category} 부문의 핵심 이슈와 실시간 시장 반응을 다루고 있으며, 투자자의 세밀한 리스크 관리를 강조함."
             quote = f"'{title}' 영상에서 {analyst}의 핵심 분석 요약: 시장의 수급 변화와 매크로 지표를 냉정하게 주시해야 합니다."
             
-            transcript = f"""
-{channel} 최신 경제 방송 분석
-분석가: {analyst}
-원본 제목: {title}
-업로드 시점: {pub_text} (발행일: {pub_date})
-주제 카테고리: {category}
-
-안녕하십니까, {channel} 시청자 여러분. {analyst}입니다.
-오늘 함께 살펴볼 핵심 주제는 '{title}'입니다.
-현재 {pub_date} 기준 글로벌 금융시장에서는 연준의 기준금리 정책과 파월 의장의 통화정책 발언, 한국은행의 금리 결정이 시장의 최대 화두입니다.
-물가지표인 CPI와 PCE, 고용 지표와 실업률 발표에 따라 미국 10년물 국채 금리와 원달러 환율, 엔화 가치가 크게 요동치고 있습니다.
-국내 증시에서는 코스피 밸류업 프로그램과 금융투자소득세(금투세) 논쟁, 삼성전자와 SK하이닉스의 HBM 메모리 반도체 실적 차별화가 관찰됩니다.
-엔비디아, 마이크로소프트, 애플 등 빅테크의 AI 인프라 투자와 전력망, 아파트 부동산 DSR 규제도 실시간으로 반영되고 있습니다.
-결론적으로 {quote}
-저의 핵심 요약은 {summary}입니다. 감사합니다.
-            """.strip()
+            # 실제 유튜브 자막 추출 (없으면 빈 문자열 유지, 인위적인 공통 문장 생성 절대 금지)
+            real_transcript = extract_transcript(vid)
+            transcript = real_transcript if real_transcript else ""
             
             cursor.execute("""
                 INSERT INTO videos (
@@ -271,7 +259,9 @@ def process_and_rebuild():
         
         for r in rows:
             vid, title, summary, transcript = r
-            nlp_res = extract_keywords_and_sentiment(f"{title} {summary} {transcript}", top_n=25)
+            # 분석 대상: 검증된 실제 자막이 있으면 원문 자막, 없으면 원본 제목만 사용
+            source_text = f"{title} {transcript}" if (transcript and len(transcript.strip()) > 30) else title
+            nlp_res = extract_keywords_and_sentiment(source_text, top_n=25)
             # video_keywords
             cursor.execute("DELETE FROM video_keywords WHERE video_id = ?", (vid,))
             for kw, cnt in nlp_res["keywords"].items():

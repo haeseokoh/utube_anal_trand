@@ -177,11 +177,66 @@ def fetch_channel_rss(channel_id: str, channel_name: str = "", default_cat: str 
         print(f"[Collector] RSS fetch error for {channel_id}: {e}")
     return videos
 
-def search_youtube_videos(query: str, max_results: int = 10) -> List[Dict[str, Any]]:
-    """유튜브 검색(Search) 결과를 스크래핑하여 실제 영상 메타데이터 대량 수집 (RSS 15개 한계 돌파)"""
-    url = f"https://www.youtube.com/results?search_query={urllib.parse.quote(query)}"
+TODAY_STR = "2026-10-10"
+TODAY_DT = datetime(2026, 10, 10)
+
+def parse_relative_pub_date(pub_text: str, title: str = "") -> str:
+    """유튜브 상대시간(pub_text)과 제목으로부터 실제 발행일 계산 (오늘 2026-10-10 기준)"""
+    if not pub_text and not title:
+        return TODAY_STR
+        
+    # 1. 제목에 명시된 6자리 날짜 (예: 261007, 260916 등)
+    m = re.search(r'2610(0[1-9]|10)', title)
+    if m:
+        return f"2026-10-{m.group(1)}"
+    m = re.search(r'2609([0-2][0-9]|30)', title)
+    if m:
+        return f"2026-09-{m.group(1)}"
+    m = re.search(r'2608([0-2][0-9]|31)', title)
+    if m:
+        return f"2026-08-{m.group(1)}"
+
+    pub_text = pub_text.strip()
+    if any(k in pub_text for k in ["시간 전", "분 전", "초 전"]):
+        return TODAY_STR
+        
+    m_day = re.search(r'(\d+)\s*일\s*전', pub_text)
+    if m_day:
+        days = int(m_day.group(1))
+        target_dt = TODAY_DT - timedelta(days=days)
+        res = target_dt.strftime("%Y-%m-%d")
+        return min(res, TODAY_STR)
+        
+    m_week = re.search(r'(\d+)\s*주\s*전', pub_text)
+    if m_week:
+        weeks = int(m_week.group(1))
+        target_dt = TODAY_DT - timedelta(weeks=weeks)
+        res = target_dt.strftime("%Y-%m-%d")
+        return min(res, TODAY_STR)
+        
+    m_month = re.search(r'(\d+)\s*개월\s*전', pub_text)
+    if m_month:
+        months = int(m_month.group(1))
+        target_dt = TODAY_DT - timedelta(days=months * 30)
+        res = target_dt.strftime("%Y-%m-%d")
+        return min(res, TODAY_STR)
+        
+    m_year = re.search(r'(\d+)\s*년\s*전', pub_text)
+    if m_year:
+        years = int(m_year.group(1))
+        target_dt = TODAY_DT - timedelta(days=years * 365)
+        res = target_dt.strftime("%Y-%m-%d")
+        return min(res, TODAY_STR)
+        
+    return TODAY_STR
+
+def search_youtube_videos(query: str, max_results: int = 10, sort_by_latest: bool = True) -> List[Dict[str, Any]]:
+    """유튜브 검색(Search) 결과를 스크래핑하여 실제 영상 메타데이터 대량 수집 (실제 게시일 파싱 및 과거 영상 차단)"""
+    sp_param = "&sp=CAI%253D" if sort_by_latest else ""
+    url = f"https://www.youtube.com/results?search_query={urllib.parse.quote(query)}{sp_param}"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "ko-KR,ko;q=0.9"
     }
     videos = []
     try:
@@ -200,8 +255,14 @@ def search_youtube_videos(query: str, max_results: int = 10) -> List[Dict[str, A
                             vid = vr.get('videoId')
                             title = vr.get('title', {}).get('runs', [{}])[0].get('text', '')
                             channel = vr.get('ownerText', {}).get('runs', [{}])[0].get('text', '경제채널')
+                            pub_text = vr.get('publishedTimeText', {}).get('simpleText', '')
                             
+                            # 3년 이상 오래된 영상 필터링 차단
+                            if any(old in pub_text for old in ["3년 전", "4년 전", "5년 전", "6년 전", "7년 전", "8년 전", "9년 전", "10년 전"]):
+                                continue
+                                
                             if vid and title and len(vid) == 11:
+                                actual_pub_date = parse_relative_pub_date(pub_text, title)
                                 analyst = detect_analyst(title, channel)
                                 category = detect_category(title)
                                 videos.append({
@@ -211,7 +272,8 @@ def search_youtube_videos(query: str, max_results: int = 10) -> List[Dict[str, A
                                     "channel_id": "",
                                     "analyst_name": analyst,
                                     "category": category,
-                                    "published_at": datetime.now().strftime("%Y-%m-%d"),
+                                    "published_at": actual_pub_date,
+                                    "pub_text": pub_text,
                                     "video_url": f"https://www.youtube.com/watch?v={vid}",
                                     "thumbnail_url": f"https://img.youtube.com/vi/{vid}/hqdefault.jpg",
                                     "view_count": 0,
@@ -245,7 +307,7 @@ def collect_latest_youtube_videos(limit_per_channel: int = 5) -> int:
         "2026 경제 전망", "금리 인하 연준 피벗", "반도체 HBM 코스피", "부동산 DSR 대출", "환율 달러 전망"
     ]
     for q in search_queries:
-        s_videos = search_youtube_videos(q, max_results=5)
+        s_videos = search_youtube_videos(q, max_results=5, sort_by_latest=True)
         for v in s_videos:
             if not get_video_by_id(v["video_id"]):
                 transcript = extract_transcript(v["video_id"])
@@ -258,16 +320,16 @@ def collect_latest_youtube_videos(limit_per_channel: int = 5) -> int:
     return total_added
 
 def collect_by_month(target_month: str, limit_per_channel: int = 5) -> int:
-    """특정 연-월(YYYY-MM)에 해당하는 영상을 채널 RSS 및 검색을 통해 대량 수집"""
-    print(f"[Collector] '{target_month}' 월간 경제 영상 대량 수집 시작...")
+    """특정 연-월(YYYY-MM)에 해당하는 실제 게시일 영상만 엄격하게 검증하여 수집"""
+    print(f"[Collector] '{target_month}' 대상 실제 게시일 영상 수집 시작...")
     total_added = 0
     
-    # 1. RSS 피드 검색
+    # 1. RSS 피드 검색 (실제 게시일이 target_month인 경우만)
     for ch in TARGET_CHANNELS:
         ch_videos = fetch_channel_rss(ch["channel_id"], ch["name"], ch["default_cat"])
         for v in ch_videos:
             pub_date = v.get("published_at", "")
-            if pub_date.startswith(target_month):
+            if pub_date.startswith(target_month) and pub_date <= TODAY_STR:
                 if not get_video_by_id(v["video_id"]):
                     transcript = extract_transcript(v["video_id"])
                     if transcript:
@@ -277,6 +339,7 @@ def collect_by_month(target_month: str, limit_per_channel: int = 5) -> int:
                         total_added += 1
                         
     # 2. RSS에 부족할 경우 유튜브 검색 엔진으로 타겟 월 관련 경제 영상 보충
+    # (실제 계산된 게시일이 target_month에 해당하는 영상만 저장)
     if total_added < 15:
         search_queries = [
             f"{target_month} 경제 전망",
@@ -286,18 +349,21 @@ def collect_by_month(target_month: str, limit_per_channel: int = 5) -> int:
             f"슈카 {target_month}"
         ]
         for q in search_queries:
-            s_videos = search_youtube_videos(q, max_results=6)
+            s_videos = search_youtube_videos(q, max_results=8, sort_by_latest=True)
             for v in s_videos:
-                if not get_video_by_id(v["video_id"]):
-                    v["published_at"] = f"{target_month}-15"
-                    v["period_label"] = target_month
-                    transcript = extract_transcript(v["video_id"])
-                    if transcript:
-                        v["transcript_text"] = transcript
-                    if save_video(v):
-                        total_added += 1
-                        if total_added >= 30:
-                            break
-                            
-    print(f"[Collector] '{target_month}' 월간 {total_added}건 신규 수집 완료.")
+                actual_date = v.get("published_at", "")
+                # 실제 계산된 게시일이 대상 월과 정확히 일치하고 오늘 이하인 경우만 저장!
+                if actual_date.startswith(target_month) and actual_date <= TODAY_STR:
+                    if not get_video_by_id(v["video_id"]):
+                        v["period_label"] = target_month
+                        transcript = extract_transcript(v["video_id"])
+                        if transcript:
+                            v["transcript_text"] = transcript
+                        if save_video(v):
+                            total_added += 1
+                            if total_added >= 30:
+                                break
+                                
+    print(f"[Collector] '{target_month}' 월간 {total_added}건 실제 게시일 기준 신규 수집 완료.")
     return total_added
+
