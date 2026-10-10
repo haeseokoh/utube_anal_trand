@@ -27,6 +27,7 @@ TODAY = "2026-10-10"
 CACHE_PATH = "C:/Users/hs/.gemini/antigravity-ide/brain/07a772b4-4fcf-4ce1-ba01-01e780345532/scratch/verified_recent_videos.json"
 
 QUERIES = [
+    "체슬리TV", "체슬리TV 박세익", "박세익", "체슬리투자자문",
     "오건영", "삼프로TV 오건영", "신한은행 오건영",
     "염승환", "LS증권 염승환", "삼프로TV 염승환",
     "김일구", "한화투자증권 김일구", "삼프로TV 김일구",

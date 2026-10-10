@@ -13,6 +13,7 @@ from crawler.seed_data import SEED_VIDEOS
 
 # 유튜브 주요 경제 채널 매핑 (확장)
 TARGET_CHANNELS = [
+    {"name": "체슬리TV", "channel_id": "UCXST0Hq6CAmG0dmo3jgrlEw", "default_cat": "국내주식"},
     {"name": "삼프로TV", "channel_id": "UChlv4GSd7OQl3js-jkLOnFA", "default_cat": "거시경제/금리"},
     {"name": "슈카월드", "channel_id": "UCsJ6RuBiTVWRX156FVbeaGg", "default_cat": "미국주식/글로벌"},
     {"name": "815머니톡", "channel_id": "UC6x7_2W3S21F5n8-W7z255w", "default_cat": "국내주식"},
@@ -26,6 +27,7 @@ TARGET_CHANNELS = [
 
 # 제목 및 설명에서 주요 분석가 탐지 정규식 (대폭 확장)
 ANALYST_PATTERNS = {
+    "박세익": [r"박세익", r"체슬리.*박세익", r"체슬리.*전무", r"체슬리.*대표", r"체슬리TV", r"체슬리투자자문"],
     "오건영": [r"오건영", r"신한.*오건영"],
     "염승환": [r"염승환", r"염블리", r"이베스트.*염승환", r"LS.*염승환"],
     "김일구": [r"김일구", r"한화.*김일구"],
@@ -59,6 +61,8 @@ def detect_analyst(text: str, channel_title: str = "") -> str:
             if re.search(pat, text, re.IGNORECASE):
                 return name
     if channel_title:
+        if "체슬리" in channel_title:
+            return "박세익"
         for name, patterns in ANALYST_PATTERNS.items():
             for pat in patterns:
                 if re.search(pat, channel_title, re.IGNORECASE):
